@@ -9,7 +9,7 @@ BurpSidian is a BurpSuite extension that automatically creates markdown files fo
 - Includes a sample request and response.
 - Shows comments, inline scripts, and forms found in the body.
 
-The extension creates a template in the form of:
+### Page template:
 
 Filename: last_directory - METHOD.md
 #### Link: link
