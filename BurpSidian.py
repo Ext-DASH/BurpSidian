@@ -28,46 +28,10 @@ class BurpExtender(IBurpExtender, ITab):
         
         # base settings and elements
         self.settingsElements = {
-            'includeRequests': {
-                'name': 'includeRequests',
-                'type': 'checkbox',
-                'defaultValue': True,
-                'label': 'Include sample request in markdown !!UNIMPLEMENTED'
-            },
-            'includeResponses': {
-                'name': 'includeResponses',
-                'type': 'checkbox',
-                'defaultValue': True,
-                'label': 'Include sample response in markdown !!UNIMPLEMENTED'
-            },
-            'cutOffResponses': {
-                'name': 'cutOffResponses',
-                'type': 'checkbox',
-                'defaultValue': True,
-                'label': 'Truncate responses at head element !!UNIMPLEMENTED'
-            },
-            'showHTMLComments': {
-                'name': 'showHTMLComments',
-                'type': 'checkbox',
-                'defaultValue': True,
-                'label': 'Include HTML comments found in response in markdown',
-            },
-            'showInlineJS': {
-                'name': 'showInlineJS',
-                'type': 'checkbox',
-                'defaultValue': True,
-                'label': 'Include Inline JavaScript found in responses in markdown',
-            },
-            'skipResources': {
-                'name': 'skipResources',
-                'type': 'checkbox',
-                'defaultValue': True,
-                'label': "Don't create markdown pages for images/css",
-            },
             'outputDirButton': {
                 'type': 'button',
                 'displayText': 'Browse',
-                'txtFieldDefaultValue': '/home/kali/Documents/Projects/Pentests/GinJuice BurpSidian Test/2. Map',
+                'txtFieldDefaultValue': os.path.expanduser('~'),
                 'label': 'Obsidian Vault',
                 'fileMode': 'directory',
                 'listener': self._browse,
@@ -84,11 +48,11 @@ class BurpExtender(IBurpExtender, ITab):
                 'hasTextField': False
             },
         }
-        # 'txtFieldDefaultValue': os.path.expanduser('~'),
         # Create settings UI
         self._create_settings_ui()
         # Add tab to Burp UI
         callbacks.addSuiteTab(self)
+
         print("BurpSidian loaded successfully!")
 
     def getTabCaption(self):
@@ -98,7 +62,6 @@ class BurpExtender(IBurpExtender, ITab):
     
     def toggleMonitoring(self, event):
         button = event.getSource()
-        print("made it to line 95")
         if not self.monitoring:
             # Start monitoring
             self.monitoring = True
@@ -138,29 +101,32 @@ class BurpExtender(IBurpExtender, ITab):
                             if not safePath:
                                 safePath = 'Home'
                             safeFileName = re.sub(r'[^a-zA-Z0-9_\-]', '_', safePath)
+                            #if new url
                             if key not in seenUrls:
+                                isUpdate = False
                                 response = entry.getResponse()
-                                resInfo = self._helpers.analyzeResponse(response)
-                                if response and not resInfo.getStatusCode() == 404:
-                                    self.createMd(key, entry, response, url, path, safePath, safeFileName)
-                                    seenUrls.add(key)
+                                if response: 
+                                    resInfo = self._helpers.analyzeResponse(response)
+                                    if resInfo.getStatusCode() != 404:
+                                        self.createMd(key, entry, response, url, path, safePath, safeFileName, isUpdate)
+                                        seenUrls.add(key)
                             else:
                                 print('key: ' + key + " is in seenUrls")
+                                #if not new url, update params
+                                isUpdate = True
+                                self.createMd(key, entry, response, url, path, safePath, safeFileName, isUpdate)
             except Exception as e:
                 print("Error in monitoring loop:")
                 print(e)
                 traceback.print_exc()
             time.sleep(5)  # Avoid spinning too fast
     
-    def createMd(self, key, entry, response, url, path, safePath, safeFileName):
+    def createMd(self, key, entry, response, url, path, safePath, safeFileName, isUpdate):
         folderPath = self.settingsElements['outputDirTxt'].getText()
         os.chdir(folderPath)
-        
-        
 
         resourceExt = ('.jpg', '.jpeg', '.png', '.gif', '.svg', '.css', '.ico', '.woff', '.woff2', '.ttf', '.eot', '.otf', '.js')
         if self.settingsElements['skipResources'].isSelected():
-            #IMPORTANT, NEEDS TO CHECK IF PART OF URL PARAM ^
             #if url doesn't end with (resource extension) and has not been created
             if not key.endswith(resourceExt) and safeFileName not in self.loggedKeys:
                 #make a valid name for the md file
@@ -171,10 +137,10 @@ class BurpExtender(IBurpExtender, ITab):
                 method = requestInfo.getMethod()
                 params = requestInfo.getParameters()
 
-                # Headers (as Java List)
+                # get headers list
                 headers = requestInfo.getHeaders()
 
-                # Body
+                # create body
                 body_offset = requestInfo.getBodyOffset()
                 body_bytes = entry.getRequest()[body_offset:]
                 body = self._helpers.bytesToString(body_bytes)
@@ -208,60 +174,50 @@ class BurpExtender(IBurpExtender, ITab):
                         trimmedBody = resBody
                         trimmedRes = resBody
                 #find comments, js, and forms in response body
-                comments = re.findall(r'<!--(.?)-->', resBody, re.DOTALL | re.IGNORECASE)
+                comments = re.findall(r'<!--(.*?)-->', resBody, re.DOTALL | re.IGNORECASE)
                 inlineJS = re.findall(r'<script.*?>(.*?)</script>', trimmedBody, re.DOTALL | re.IGNORECASE)
                 forms = re.findall(r'<form.*?>(.*?)</form>', resBody, re.DOTALL | re.IGNORECASE)
                 #Create markdown
                 print("creating markdown for key: " + key)
                 #below needs refactor
                 with open(safeFileName + ' - ' + method + '.md', "a") as f:
-                    f.write('\r\n')
-                    f.write("#### Link: " + key + '\r\n')
-                    f.write("---")
-                    f.write('\r\n')
-                    f.write('#### Description: ')
-                    f.write('\r\n')
-                    f.write('UPDATE\r\n\r\n')
-                    f.write('---')
-                    f.write('\r\n')
-                    f.write('#### Inputs:')
-                    f.write('\r\n')
+                    lines = []
+                    
+                    
+                    #link, desc, inputs header
+                    lines.append('\r\n'+"#### Link: " + key + '\r\n\r\n'+'#### Description: '+'\r\n'+'UPDATE\r\n\r\n---\r\n\r\n#### Inputs:\r\n')
+                    #inputs
                     paramTypes = {0: '(URL)', 1: '(BODY)', 2: '(COOKIE)'}
+
                     for param in params:
-                        f.write('- ' + param.getName() + ' ' + paramTypes.get(param.getType(), '(UNKNOWN)'))
-                        f.write('\r\n')
-                    f.write('---')
-                    f.write('\r\n')
-                    f.write('#### Sample Request:')
-                    f.write('\r\n')
-                    f.write('```HTTP')
-                    f.write('\r\n')
-                    f.write(full_request)
-                    f.write('```\r\n---\r\n')
-                    f.write('#### Sample Response:')
-                    f.write('\r\n')
-                    f.write('```HTTP')
-                    f.write('\r\n')
-                    f.write('\r\n'.join(responseHeaders) + "\r\n\r\n" + trimmedRes + "\r\n")
-                    f.write('```\r\n---\r\n\r\n')
+                        lines.append('- ' + param.getName() + ' ' + paramTypes.get(param.getType(), '(UNKNOWN)\r\n'))
+                    #sample req and res
+                    lines.append("""\r\n---\r\n
+                    #### Sample Request:\r\n\r\n
+                    ```HTTP\r\n"""+full_request+"""\r\n\r\n```\r\n\r\n---\r\n\r\n
+                    #### Sample Response:\r\n\r\n
+                    ```HTTP\r\n\r\n"""
+                    +'\r\n'.join(responseHeaders)+'\r\n\r\n'+trimmedRes+"""\r\n
+                    ```\r\n\r\n---\r\n\r\n
+                    """)
+                    #comments
                     if comments:
-                        f.write('#### Found Comments:')
-                        f.write('\r\n')
+                        lines.append('#### Found Comments:\r\n\r\n')
                         for cmnt in comments:
-                            f.write('```HTML' + '\r\n' + '<!-- \r\n' + cmnt.strip() + '\r\n -->' + '\r\n```\r\n\r\n')
-                        f.write('\r\n---\r\n')
+                            lines.append('```HTML' + '\r\n' + '<!-- \r\n' + cmnt.strip() + '\r\n -->' + '\r\n```\r\n\r\n')
+                        lines.append('\r\n---\r\n')
+                    #inlineJS
                     if inlineJS:
-                        f.write('#### Found Scripts:')
-                        f.write('\r\n')
+                        lines.append('#### Found Scripts:\r\n\r\n')
                         for script in inlineJS:
-                            f.write('```HTML' + '\r\n' + '<script>\r\n' + script.strip() + '\r\n</script>' + '\r\n```\r\n\r\n')
-                        f.write('\r\n---\r\n')
+                            lines.append('```HTML' + '\r\n' + '<script>\r\n' + script.strip() + '\r\n</script>' + '\r\n```\r\n\r\n')
+                        lines.append('\r\n---\r\n')
+                    #forms
                     if forms:
-                        f.write('#### Found Forms:')
-                        f.write('\r\n')
+                        lines.append('#### Found Forms:\r\n\r\n')
                         for form in forms:
-                            f.write('```HTML' + '\r\n' + '<form>\r\n' + form.strip() + '\r\n</form>' + '\r\n```\r\n\r\n')
-                        f.write('\r\n---\r\n')
+                            lines.append('```HTML' + '\r\n' + '<form>\r\n' + form.strip() + '\r\n</form>' + '\r\n```\r\n\r\n')
+                        lines.append('\r\n---\r\n')
                 #mark key as logged
                 self.loggedKeys.add(key)
             if key.endswith('.js') and key not in self.loggedKeys:
@@ -326,15 +282,7 @@ class BurpExtender(IBurpExtender, ITab):
             selected_dir = chooser.getSelectedFile().getAbsolutePath()
             self.settingsElements['outputDirTxt'].setText(selected_dir)
             print("Selected directory: " + selected_dir)
-    
-# 1. add method to above class
-#   This is the login
-# 2. add the thing you want to use that logic
-#   i.e. a button
-# 3. create a listener for the thing from 2
-#   shown below
-# 4. Wire the save button to use the newly created listener
-#   element.addActionListener(self._method)
+
 class BrowseDirectoryListener(ActionListener):
     def __init__(self, extender):
         self._extender = extender  # Store reference to the main extension
@@ -351,4 +299,4 @@ class BrowseDirectoryListener(ActionListener):
         if chooser.showOpenDialog(self._extender.settingsPanel) == JFileChooser.APPROVE_OPTION:
             selected_dir = chooser.getSelectedFile().getAbsolutePath()
             self._extender._output_dir_field.setText(selected_dir)
-            print("Selected directory: " + selected_dir)   
+            print("Selected directory: " + selected_dir)
