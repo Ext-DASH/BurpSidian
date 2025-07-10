@@ -126,111 +126,108 @@ class BurpExtender(IBurpExtender, ITab):
         os.chdir(folderPath)
 
         resourceExt = ('.jpg', '.jpeg', '.png', '.gif', '.svg', '.css', '.ico', '.woff', '.woff2', '.ttf', '.eot', '.otf', '.js')
-        if self.settingsElements['skipResources'].isSelected():
-            #if url doesn't end with (resource extension) and has not been created
-            if not key.endswith(resourceExt) and safeFileName not in self.loggedKeys:
-                #make a valid name for the md file
-                key = key.strip('/')
+        #if url doesn't end with (resource extension) and has not been created
+        if not key.endswith(resourceExt) and safeFileName not in self.loggedKeys:
+            #make a valid name for the md file
+            key = key.strip('/')
 
-                #get request info
-                requestInfo = self._helpers.analyzeRequest(entry.getHttpService(), entry.getRequest())
-                method = requestInfo.getMethod()
-                params = requestInfo.getParameters()
+            #get request info
+            requestInfo = self._helpers.analyzeRequest(entry.getHttpService(), entry.getRequest())
+            method = requestInfo.getMethod()
+            params = requestInfo.getParameters()
 
-                # get headers list
-                headers = requestInfo.getHeaders()
+            # get headers list
+            headers = requestInfo.getHeaders()
 
-                # create body
-                body_offset = requestInfo.getBodyOffset()
-                body_bytes = entry.getRequest()[body_offset:]
-                body = self._helpers.bytesToString(body_bytes)
+            # create body
+            body_offset = requestInfo.getBodyOffset()
+            body_bytes = entry.getRequest()[body_offset:]
+            body = self._helpers.bytesToString(body_bytes)
 
-                # Combine headers and body into full HTTP request
-                full_request = "\r\n".join(headers) + "\r\n\r\n" + body
+            # Combine headers and body into full HTTP request
+            full_request = "\r\n".join(headers) + "\r\n\r\n" + body
+            
+            #analyze response
+            responseInfo = self._helpers.analyzeResponse(response)
+
+            # Headers (Java List)
+            responseHeaders = responseInfo.getHeaders()
+            
+            # Body
+            res_body_offset = responseInfo.getBodyOffset()
+            res_body_bytes = response[res_body_offset:]
+            resBody = self._helpers.bytesToString(res_body_bytes)
+
+            #check if content type is text/html
+            isHtmlContentType = any("content-type:" in h.lower() and "text/html" in h.lower() for h in responseHeaders)
+
+            trimmedRes = ''
+            trimmedBody = ''
+            if isHtmlContentType:
+                #if it is text/html, find </head> and truncate
+                resClosingHeadIdx = resBody.lower().find("</head>")
+                if resClosingHeadIdx != -1:
+                    trimmedRes = resBody[:resClosingHeadIdx + len("</head>")] + '\r\n' + "[TRUNCATED]"
+                    trimmedBody = resBody[resClosingHeadIdx + len("</head>"):]
+                else:
+                    trimmedBody = resBody
+                    trimmedRes = resBody
+            #find comments, js, and forms in response body
+            comments = re.findall(r'<!--(.*?)-->', resBody, re.DOTALL | re.IGNORECASE)
+            inlineJS = re.findall(r'<script.*?>(.*?)</script>', trimmedBody, re.DOTALL | re.IGNORECASE)
+            forms = re.findall(r'<form.*?>(.*?)</form>', resBody, re.DOTALL | re.IGNORECASE)
+            #Create markdown
+            print("creating markdown for key: " + key)
+            #below needs refactor
+            lines = ''
+            with open(safeFileName + ' - ' + method + '.md', "a") as f:  
+                #link, desc, inputs header
+                lines += ('\r\n'+"#### Link: " + key + '\r\n\r\n'+'#### Description: '+'\r\n'+'UPDATE\r\n\r\n---\r\n\r\n#### Inputs:\r\n')
+                #inputs
+                paramTypes = {0: '(URL)\r\n', 1: '(BODY)\r\n', 2: '(COOKIE)\r\n'}
+
+                for param in params:
+                    lines += ('- ' + param.getName() + ' ' + paramTypes.get(param.getType(), '(UNKNOWN)\r\n'))
+                #sample req and res
+                lines += ("\r\n---\r\n" \
+                "#### Sample Request:\r\n\r\n" \
+                "```HTTP\r\n"+full_request+"\r\n\r\n```\r\n\r\n---\r\n\r\n" \
+                "#### Sample Response:\r\n\r\n" \
+                "```HTTP\r\n\r\n" + "\r\n".join(responseHeaders)+"\r\n\r\n"+trimmedRes+"\r\n" \
+                "```\r\n\r\n---\r\n\r\n")
+                #comments
+                if comments:
+                    lines += ('#### Found Comments:\r\n\r\n')
+                    for cmnt in comments:
+                        lines += ('```HTML' + '\r\n' + '<!-- \r\n' + cmnt.strip() + '\r\n -->' + '\r\n```\r\n\r\n')
+                    lines += ('\r\n---\r\n')
+                #inlineJS
+                if inlineJS:
+                    lines += ('#### Found Scripts:\r\n\r\n')
+                    for script in inlineJS:
+                        lines += ('```HTML' + '\r\n' + '<script>\r\n' + script.strip() + '\r\n</script>' + '\r\n```\r\n\r\n')
+                    lines += ('\r\n---\r\n')
+                #forms
+                if forms:
+                    lines += ('#### Found Forms:\r\n\r\n')
+                    for form in forms:
+                        lines += ('```HTML' + '\r\n' + '<form>\r\n' + form.strip() + '\r\n</form>' + '\r\n```\r\n\r\n')
+                    lines += ('\r\n---\r\n')
                 
-                #analyze response
-                responseInfo = self._helpers.analyzeResponse(response)
+                f.write(lines)
+            #mark key as logged
+            self.loggedKeys.add(key)
+        if key.endswith('.js') and key not in self.loggedKeys:
+            # check for "Static JS Includes" file
+            fileName = "Static JS Inclusions.md"
+            with open(fileName, "a") as f:
+                f.write('\r\n')
+                f.write('- ')
+                f.write(key)
+            self.loggedKeys.add(safeFileName)
 
-                # Headers (Java List)
-                responseHeaders = responseInfo.getHeaders()
-                
-                # Body
-                res_body_offset = responseInfo.getBodyOffset()
-                res_body_bytes = response[res_body_offset:]
-                resBody = self._helpers.bytesToString(res_body_bytes)
-
-                #check if content type is text/html
-                isHtmlContentType = any("content-type:" in h.lower() and "text/html" in h.lower() for h in responseHeaders)
-
-                trimmedRes = ''
-                trimmedBody = ''
-                if isHtmlContentType:
-                    #if it is text/html, find </head> and truncate
-                    resClosingHeadIdx = resBody.lower().find("</head>")
-                    if resClosingHeadIdx != -1:
-                        trimmedRes = resBody[:resClosingHeadIdx + len("</head>")] + '\r\n' + "[TRUNCATED]"
-                        trimmedBody = resBody[resClosingHeadIdx + len("</head>"):]
-                    else:
-                        trimmedBody = resBody
-                        trimmedRes = resBody
-                #find comments, js, and forms in response body
-                comments = re.findall(r'<!--(.*?)-->', resBody, re.DOTALL | re.IGNORECASE)
-                inlineJS = re.findall(r'<script.*?>(.*?)</script>', trimmedBody, re.DOTALL | re.IGNORECASE)
-                forms = re.findall(r'<form.*?>(.*?)</form>', resBody, re.DOTALL | re.IGNORECASE)
-                #Create markdown
-                print("creating markdown for key: " + key)
-                #below needs refactor
-                with open(safeFileName + ' - ' + method + '.md', "a") as f:
-                    lines = []
-                    
-                    
-                    #link, desc, inputs header
-                    lines.append('\r\n'+"#### Link: " + key + '\r\n\r\n'+'#### Description: '+'\r\n'+'UPDATE\r\n\r\n---\r\n\r\n#### Inputs:\r\n')
-                    #inputs
-                    paramTypes = {0: '(URL)', 1: '(BODY)', 2: '(COOKIE)'}
-
-                    for param in params:
-                        lines.append('- ' + param.getName() + ' ' + paramTypes.get(param.getType(), '(UNKNOWN)\r\n'))
-                    #sample req and res
-                    lines.append("""\r\n---\r\n
-                    #### Sample Request:\r\n\r\n
-                    ```HTTP\r\n"""+full_request+"""\r\n\r\n```\r\n\r\n---\r\n\r\n
-                    #### Sample Response:\r\n\r\n
-                    ```HTTP\r\n\r\n"""
-                    +'\r\n'.join(responseHeaders)+'\r\n\r\n'+trimmedRes+"""\r\n
-                    ```\r\n\r\n---\r\n\r\n
-                    """)
-                    #comments
-                    if comments:
-                        lines.append('#### Found Comments:\r\n\r\n')
-                        for cmnt in comments:
-                            lines.append('```HTML' + '\r\n' + '<!-- \r\n' + cmnt.strip() + '\r\n -->' + '\r\n```\r\n\r\n')
-                        lines.append('\r\n---\r\n')
-                    #inlineJS
-                    if inlineJS:
-                        lines.append('#### Found Scripts:\r\n\r\n')
-                        for script in inlineJS:
-                            lines.append('```HTML' + '\r\n' + '<script>\r\n' + script.strip() + '\r\n</script>' + '\r\n```\r\n\r\n')
-                        lines.append('\r\n---\r\n')
-                    #forms
-                    if forms:
-                        lines.append('#### Found Forms:\r\n\r\n')
-                        for form in forms:
-                            lines.append('```HTML' + '\r\n' + '<form>\r\n' + form.strip() + '\r\n</form>' + '\r\n```\r\n\r\n')
-                        lines.append('\r\n---\r\n')
-                #mark key as logged
-                self.loggedKeys.add(key)
-            if key.endswith('.js') and key not in self.loggedKeys:
-                # check for "Static JS Includes" file
-                fileName = "Static JS Inclusions.md"
-                with open(fileName, "a") as f:
-                    f.write('\r\n')
-                    f.write('- ')
-                    f.write(key)
-                self.loggedKeys.add(safeFileName)
-
-            else:    
-                None
+        else:    
+            None
     def _create_settings_ui(self):
         self.settingsPanel = JPanel()
         self.settingsPanel.setLayout(GridBagLayout())
