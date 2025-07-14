@@ -5,45 +5,51 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
-
 import burp.api.montoya.sitemap.SiteMap;
 import burp.api.montoya.scope.Scope;
-
+import burp.extension.models.MarkdownWriter;
 import burp.extension.models.PlainTextRequestResponse;
 import burp.extension.models.Setting;
 
+import java.io.FileWriter;
+import java.io.IOException;
+
 import javax.swing.*;
 import java.awt.*;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.Map;
+
 
 public class Extension implements BurpExtension {
     // GLOBALS
     public MontoyaApi api;
     private final String extensionName = "BurpSidian";
-    private final String version = "b1.0.0";
+    private final String version = "v1.0.1";
+    
+    private final String[] resourceExtensions = {".mp4", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".css", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".otf"};
 
+    private final Map<String, PlainTextRequestResponse> loggedPages = new HashMap<>();
+    Set<String> loggedResourceUrls = new HashSet<>();
+    HashMap<String, String> loggedPageUrls = new HashMap<>();
     private boolean monitoring = false;
     private Thread monitorThread;
-
-    private final String[] resourceExtensions = {".jpg", ".jpeg", ".png", ".gif", ".svg", ".css", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".otf", ".js"};
-    // PlainTextReqRes holder
-    private final Map<String, PlainTextRequestResponse> entries = new HashMap<>();
     // settings
     private final Map<String, Setting> settings = new HashMap<>();
     
     //add settings to hashmap
     {
-        settings.put("showHTMLComments", new Setting("showHTMLComments", "checkbox", "true", "Include HTML comments found in response in markdown", null, null, false, null, null, false));
-        settings.put("showInlineJS", new Setting("showInlineJS", "checkbox", "true", "Include Inline JavaScript found in responses in markdown", null, null, false, null, null, false));
-        settings.put("skipResources", new Setting("skipResources", "checkbox", "true", "Don't create markdown pages for images/css", null, null, false, null, null, false));
+        // settings.put("showHTMLComments", new Setting("showHTMLComments", "checkbox", "true", "Include HTML comments found in response in markdown", null, null, false, null, null, false));
+        // settings.put("showInlineJS", new Setting("showInlineJS", "checkbox", "true", "Include Inline JavaScript found in responses in markdown", null, null, false, null, null, false));
+        // settings.put("skipResources", new Setting("skipResources", "checkbox", "true", "Don't create markdown pages for images/css", null, null, false, null, null, false));
         settings.put("monitoringButton", new Setting("monitoringButton", "button", null, null, "Start Montoring", "monitor", false, null, null, false));
-        settings.put("outputDirButton", new Setting("outputDirButton", "button", "/home/kali/Documents/Projects/Pentests/GinJuice BurpSidian Test/2. Map", "Obsidian Vault/Output Location", "Browse", "browse", true, "directory", "outputDirTxt", false));
+        settings.put("outputDirButton", new Setting("outputDirButton", "button", "/home/kali/Documents/Projects/Pentests/GinJuice BurpSidian Test/2. Map/", "Obsidian Vault/Output Location", "Browse", "browse", true, "directory", "outputDirTxt", false));
     }
 
     // initialize burp panel
-    private Component initJPanel(MontoyaApi montoyaApi) {
+    private Component initJPanel(MontoyaApi api) {
         JPanel settingsPanel = new JPanel();
         settingsPanel.setLayout(new GridBagLayout());
         
@@ -82,7 +88,7 @@ public class Extension implements BurpExtension {
                         btn.addActionListener(e -> {
                             if (!monitoring) {
                                 monitoring = true;
-                                startMonitoringThread();
+                                startMonitoringThread(api);
                                 btn.setText("Stop Monitoring");
                             } else {
                                 monitoring = false;
@@ -104,10 +110,11 @@ public class Extension implements BurpExtension {
                                 JFileChooser chooser = new JFileChooser();
                                 chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
 
-                                int returnVal = chooser.showOpenDialog(null);
+                                chooser.showOpenDialog(null);
                                 String selectedDir = chooser.getSelectedFile().getAbsolutePath();
 
                                 txtField.setText(selectedDir);
+                                settingValue.setDefaultValue(selectedDir);
                             });
                         }
                         settingsPanel.add(txtField, gbc);
@@ -124,29 +131,60 @@ public class Extension implements BurpExtension {
     public void initialize(MontoyaApi api) {
         api.extension().setName(extensionName);
         api.userInterface().registerSuiteTab(extensionName, initJPanel(api));
+        System.out.println("BurpSidian Version: " + version);
                 
     }
 
     //methods
-    public void startMonitoringThread() {
-        monitorThread = new Thread(() -> {
-            
-            //get list sitemap, use api.isInScope(url)
+    public void startMonitoringThread(MontoyaApi api) {
+        String dirPath = settings.get("outputDirButton").getDefaultValue();
+        
 
+        monitorThread = new Thread(() -> {
             while (monitoring) {
-                try {                  
+                try {  
+                                   
                     Scope scope = api.scope();
                     SiteMap siteMap = api.siteMap();
                     System.out.println("monitoring...");
                     for (HttpRequestResponse reqRes : siteMap.requestResponses()) {
                         String url = reqRes.request().url();
-                        //if url is in scope and we have visited the path and the response was anything other than 404
-                        if(scope.isInScope(url) && reqRes.hasResponse() && reqRes.response().statusCode() != 404) {
+                        //strip url of params
+                        String strippedUrl = url.contains("?") ? url.split("\\?")[0] : url;
+
+                        boolean isResource = Arrays.stream(resourceExtensions).anyMatch(url::endsWith);
+                        boolean isStaticInclude = url.endsWith(".js");
+                        boolean isResourceLogged = loggedResourceUrls.contains(strippedUrl);
+                        boolean isPageLogged = loggedPageUrls.containsKey(strippedUrl);
+                        //url is in scope, has a response that is not 404, is not a resource and has not been logged
+                        boolean needsLogging = scope.isInScope(url) && reqRes.hasResponse() && reqRes.response().statusCode() != 404 && reqRes.response().statusCode() != 302 && !isResource && !isPageLogged;
+                        boolean needsUpdateCheck = scope.isInScope(url) && reqRes.hasResponse() && reqRes.response().statusCode() != 404 && reqRes.response().statusCode() != 302 && !isResource && isPageLogged;
+                        //needsLogging ^, but has been logged
+
+                        if (scope.isInScope(url) && isResource && !isResourceLogged) {
+                            //log all resource files
+                            appendToResourcesLog(dirPath + "Resources.md", url);
+                            loggedResourceUrls.add(url);
+                        } else if (scope.isInScope(url) && isStaticInclude && !isResourceLogged) {
+                            appendToResourcesLog(dirPath + "Static Inclusions.md", url);
+                            loggedResourceUrls.add(url);
+                        } else if(needsLogging) {
                             HttpRequest request = reqRes.request();
                             HttpResponse response = reqRes.response();
+
+                            System.out.println("Create page for: " + strippedUrl);
+                            //process the request/response
+                            PlainTextRequestResponse plainTextRequestResponse = PlainTextRequestResponse.from(request, response);
+                            MarkdownWriter.createPageMd(dirPath, plainTextRequestResponse);
+                            loggedPages.put(strippedUrl, plainTextRequestResponse);
+
+                            //put url + method in logged urls
+                            loggedPageUrls.put(strippedUrl, request.method()); // ? wtf
+                        } else if (needsUpdateCheck) {
+                            loggedPages.get(strippedUrl);
                         }
                     }
-                    Thread.sleep(500);
+                    Thread.sleep(5000);
 
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
@@ -157,5 +195,13 @@ public class Extension implements BurpExtension {
         monitorThread.start();
     }
 
+    public void appendToResourcesLog(String path, String content) {
+        try (FileWriter writer = new FileWriter(path, true)) {  // append = true
+            writer.write("- " + content);
+            writer.write(System.lineSeparator());  // newline
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 }
 
