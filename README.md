@@ -35,6 +35,10 @@ response up to </head>
 ```
 
 ---
+#### Found Hidden Elements:
+```HTML
+<input type="hidden" name="password" value="password"/>
+```
 #### Found comments:
 ```HTML
 <!-- This section will only display if comment(s) are found -->
@@ -49,7 +53,7 @@ response up to </head>
 ---
 #### Found HTML Forms:
 ```HTML
-<form>
+<form action="post"...>
 	<!-- This section will only display if form element(s) are found --->
 </form>
 ```
