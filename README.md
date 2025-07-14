@@ -11,7 +11,7 @@ BurpSidian is a BurpSuite extension that automatically creates markdown files fo
 
 ### Page template:
 
-Filename: last_directory - METHOD.md
+Filename: directory?urlParams(if any).md
 #### Link: link
 ---
 #### Description:
@@ -19,9 +19,9 @@ Needs to be manually updated
 
 ---
 #### Inputs:
-- list (location)
-- of (location)
-- params (location)
+- list 
+- of 
+- params
 ---
 #### Sample Request:
 ```HTTP
@@ -31,8 +31,7 @@ request
 ---
 #### Sample Response:
 ```HTTP
-response 
-(if content-type is text/html, then will show body up to </head>)
+response up to </head>
 ```
 
 ---
