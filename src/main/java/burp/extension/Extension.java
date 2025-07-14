@@ -143,7 +143,7 @@ public class Extension implements BurpExtension {
         monitorThread = new Thread(() -> {
             while (monitoring) {
                 try {  
-                                   
+                    //monitor logic              
                     Scope scope = api.scope();
                     SiteMap siteMap = api.siteMap();
                     System.out.println("monitoring...");
@@ -156,10 +156,22 @@ public class Extension implements BurpExtension {
                         boolean isStaticInclude = url.endsWith(".js");
                         boolean isResourceLogged = loggedResourceUrls.contains(strippedUrl);
                         boolean isPageLogged = loggedPageUrls.containsKey(strippedUrl);
+                        //ALSO NEED TO CHECK METHOD FOR POST ETC
+                        
                         //url is in scope, has a response that is not 404, is not a resource and has not been logged
-                        boolean needsLogging = scope.isInScope(url) && reqRes.hasResponse() && reqRes.response().statusCode() != 404 && reqRes.response().statusCode() != 302 && !isResource && !isPageLogged;
-                        boolean needsUpdateCheck = scope.isInScope(url) && reqRes.hasResponse() && reqRes.response().statusCode() != 404 && reqRes.response().statusCode() != 302 && !isResource && isPageLogged;
-                        //needsLogging ^, but has been logged
+                        boolean needsLogging = scope.isInScope(url) && 
+                        reqRes.hasResponse() && 
+                        reqRes.response().statusCode() != 404 && 
+                        reqRes.response().statusCode() != 302 && 
+                        !isResource && 
+                        !isPageLogged;
+
+                        boolean needsUpdateCheck = scope.isInScope(url) && 
+                        reqRes.hasResponse() && 
+                        reqRes.response().statusCode() != 404 && 
+                        reqRes.response().statusCode() != 302 && 
+                        !isResource && 
+                        isPageLogged;
 
                         if (scope.isInScope(url) && isResource && !isResourceLogged) {
                             //log all resource files

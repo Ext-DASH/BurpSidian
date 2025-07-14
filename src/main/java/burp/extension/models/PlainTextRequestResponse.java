@@ -31,6 +31,8 @@ public class PlainTextRequestResponse {
     private List<String> hiddenElements;
     public String getResponseHeaders;
 
+    private String method;
+
     //Constructor
     public PlainTextRequestResponse(HttpRequest request, HttpResponse response) {
         this.request = request;
@@ -61,6 +63,7 @@ public class PlainTextRequestResponse {
         this.requestBody = request.bodyToString();
         this.reqMethod = request.method();
         this.requestParameters = request.parameters();
+        this.method = request.method();
         
 
     }
@@ -97,6 +100,10 @@ public class PlainTextRequestResponse {
 
     public String getUrl() {
         return this.url;
+    }
+
+    public String getMethod() {
+        return this.method;
     }
 
     public List<ParsedHttpParameter> getParameters() {

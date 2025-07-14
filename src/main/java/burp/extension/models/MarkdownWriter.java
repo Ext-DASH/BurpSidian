@@ -6,7 +6,7 @@ import java.io.IOException;
 import burp.api.montoya.http.message.params.*;
 public class MarkdownWriter {
     public static void createPageMd(String dirPath, PlainTextRequestResponse entry) {
-        try (FileWriter writer = new FileWriter(dirPath + entry.getFileName() + ".md", true)) {
+        try (FileWriter writer = new FileWriter(dirPath + entry.getFileName() + " - " + entry.getMethod() + ".md", true)) {
             writer.write("#### Link:" + entry.getUrl() + "\r\n\r\n---\r\n\r\n");
             writer.write("#### Description: \r\n\r\nNEEDS MANUAL UPDATE\r\n\r\n---\r\n\r\n");
             writer.write("#### Inputs: \r\n\r\n");
