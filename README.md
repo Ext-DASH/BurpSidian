@@ -1,17 +1,16 @@
 # What is it?
 
-BurpSidian is a BurpSuite extension that automatically creates markdown files for visited pages. The extension is continuously watching SiteMap for InScope URL's and creates the markdown for you. The extension does not create markdown for resource files (line 128) and instead creates a seperate "Static Inclusions.md" with a list of the found inclusions.
+BurpSidian is a BurpSuite extension that automatically creates markdown files for visited pages. The extension is continuously watching SiteMap for InScope URL's and creates the markdown for you. The extension does not create markdown for resource files and instead creates a seperate "Static Inclusions.md" and "Resources.md" with a list of the found inclusions and found resources.
 
 ### Key Features:
-- Creates md with the method in the file name.
 - Includes a link.
 - Lists all inputs found and their location.
 - Includes a sample request and response.
-- Shows comments, inline scripts, and forms found in the body.
+- Shows comments, inline scripts, forms and hidden elements found in the body.
 
 ### Page template:
 
-Filename: directory?urlParams(if any).md
+Filename: directory?urlParams(if any).md (this will be changed)
 #### Link: link
 ---
 #### Description:
