@@ -27,7 +27,12 @@ public class Extension implements BurpExtension {
     // GLOBALS
     public MontoyaApi api;
     private final String extensionName = "BurpSidian";
-    private final String version = "v1.0.1";
+    private final String version = "v1.0.2";
+    //whats new:
+        /* 
+        - Fixed an issue where the extension would create certain js page files rather than append them to the resources log
+        - Created a new SiteLog.md file that lists pages in hierarchy
+        */
     
     private final String[] resourceExtensions = {".mp4", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".css", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".otf"};
 
@@ -163,22 +168,23 @@ public class Extension implements BurpExtension {
                         reqRes.hasResponse() && 
                         reqRes.response().statusCode() != 404 && 
                         reqRes.response().statusCode() != 302 && 
-                        !isResource && 
+                        !isResource && !isStaticInclude &&
                         !isPageLogged;
 
                         boolean needsUpdateCheck = scope.isInScope(url) && 
                         reqRes.hasResponse() && 
                         reqRes.response().statusCode() != 404 && 
-                        reqRes.response().statusCode() != 302 && 
                         !isResource && 
                         isPageLogged;
 
                         if (scope.isInScope(url) && isResource && !isResourceLogged) {
                             //log all resource files
-                            appendToResourcesLog(dirPath + "Resources.md", url);
+                            MarkdownWriter.appendToResourcesLog(dirPath + "Resources.md", url);
+                            MarkdownWriter.appendToSiteLog(url, reqRes, true, dirPath + "SiteLog.md");
                             loggedResourceUrls.add(url);
                         } else if (scope.isInScope(url) && isStaticInclude && !isResourceLogged) {
-                            appendToResourcesLog(dirPath + "Static Inclusions.md", url);
+                            MarkdownWriter.appendToResourcesLog(dirPath + "Static Inclusions.md", url);
+                            MarkdownWriter.appendToSiteLog(url, reqRes, true, dirPath + "SiteLog.md");
                             loggedResourceUrls.add(url);
                         } else if(needsLogging) {
                             HttpRequest request = reqRes.request();
@@ -188,6 +194,8 @@ public class Extension implements BurpExtension {
                             //process the request/response
                             PlainTextRequestResponse plainTextRequestResponse = PlainTextRequestResponse.from(request, response);
                             MarkdownWriter.createPageMd(dirPath, plainTextRequestResponse);
+                            MarkdownWriter.appendToSiteLog(url, reqRes, false, dirPath + "SiteLog.md");
+
                             loggedPages.put(strippedUrl, plainTextRequestResponse);
 
                             //put url + method in logged urls
@@ -207,13 +215,6 @@ public class Extension implements BurpExtension {
         monitorThread.start();
     }
 
-    public void appendToResourcesLog(String path, String content) {
-        try (FileWriter writer = new FileWriter(path, true)) {  // append = true
-            writer.write("- " + content);
-            writer.write(System.lineSeparator());  // newline
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
+    
 }
 
