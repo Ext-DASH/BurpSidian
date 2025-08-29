@@ -57,7 +57,9 @@ public class PlainTextRequestResponse {
         if ("/".equals(this.urlPath)) {
             this.fileName = "Home Page";
         } else {
-            this.fileName = this.urlPath.replace('/', ' ');
+            int i = this.urlPath.indexOf('?');
+            String noQuery = (i >= 0) ? this.urlPath.substring(0, i) : this.urlPath;
+            this.fileName = noQuery.replace('/', ' ');
         }
         this.requestHeaders = request.headers();
         this.requestBody = request.bodyToString();

@@ -13,12 +13,18 @@ import java.util.Map;
 import java.util.Set;
 
 import burp.api.montoya.http.message.HttpRequestResponse;
+import burp.api.montoya.http.message.MimeType;
 import burp.api.montoya.http.message.HttpRequestResponse.*;
 import burp.api.montoya.http.message.params.*;
 import burp.api.montoya.http.message.requests.HttpRequest;
+import burp.api.montoya.http.message.responses.*;
+
 public class MarkdownWriter {
-    public static void createPageMd(String dirPath, PlainTextRequestResponse entry) {
-        try (FileWriter writer = new FileWriter(dirPath + entry.getFileName() + " - " + entry.getMethod() + ".md", true)) {
+    public static void createPageMd(String dirPath, PlainTextRequestResponse entry, HttpResponse response) {
+        boolean isHtml = response.mimeType().equals(MimeType.HTML);
+        System.err.println(isHtml);
+        String responseMd = isHtml ? entry.getResponseToHead() : response.toString();
+        try (FileWriter writer = new FileWriter(dirPath.trim() + entry.getFileName().trim() + " - " + entry.getMethod() + ".md", true)) {
             writer.write("#### Link:" + entry.getUrl() + "\r\n\r\n---\r\n\r\n");
             writer.write("#### Description: \r\n\r\nNEEDS MANUAL UPDATE\r\n\r\n---\r\n\r\n");
             writer.write("#### Inputs: \r\n\r\n");
@@ -27,10 +33,9 @@ public class MarkdownWriter {
             }
             writer.write("\r\n#### Sample Request: \r\n\r\n");
             writer.write("```HTTP\r\n" + entry.getFullRequest());
-            writer.write("\r\n\r\n```\r\n\r\n");
-            writer.write("---\r\n\r\n");
+            writer.write("\r\n\r\n```\r\n\r\n---\r\n\r\n");
             writer.write("#### Sample Response: \r\n\r\n");
-            writer.write("```HTTP\r\n" + entry.getResponseToHead() + "\r\n\r\n[TRUNCATED]\r\n\r\n```\r\n\r\n---\r\n\r\n");
+            writer.write("```HTTP\r\n" + responseMd + "\r\n\r\n[TRUNCATED]\r\n\r\n```\r\n\r\n---\r\n\r\n");
             if (entry.getComments() != null && !entry.getComments().isEmpty()) {
                 writer.write("#### Found Comments: \r\n\r\n");
                 for(String comment : entry.getComments()) {
@@ -74,6 +79,7 @@ public class MarkdownWriter {
     }
 
     public static void appendToSiteLog(String url, HttpRequestResponse reqRes, boolean isResource, String path) {
+        System.out.println(path);
         System.out.println("Hi from appendToSiteLog");
         System.out.println(isResource);
         System.out.println(url);
@@ -105,12 +111,12 @@ public class MarkdownWriter {
 
         StringBuilder currentPath = new StringBuilder();
         String domain = segments[0]; // e.g., ginandjuice.shop
-
+        
         // Start from root after domain
         try (FileWriter writer = new FileWriter(path, true)) {
-            if (!existingLines.contains("### /" + domain)) {
-                writer.write("### /" + domain + System.lineSeparator());
-                existingLines.add("### /" + domain);
+            if (!existingLines.contains("### " + domain)) {
+                writer.write("### " + domain + " - " + method + System.lineSeparator());
+                existingLines.add("### " + domain);
             }
 
             for (int i = 1; i < segments.length; i++) {
@@ -124,7 +130,7 @@ public class MarkdownWriter {
 
                 if (!existingLines.contains(line)) {
                     writer.write(line + System.lineSeparator());
-                    existingLines.add(line);
+                    existingLines.add(line + " - " + method );
                 }
             }
 
@@ -138,13 +144,6 @@ public class MarkdownWriter {
                     writer.write(queryLine + System.lineSeparator());
                     existingLines.add(queryLine);
                 }
-            }
-
-            // Add method indicator
-            String methodLine = "\t".repeat(segments.length) + method;
-            if (!existingLines.contains(methodLine)) {
-                writer.write(methodLine + System.lineSeparator());
-                existingLines.add(methodLine);
             }
 
         } catch (IOException e) {

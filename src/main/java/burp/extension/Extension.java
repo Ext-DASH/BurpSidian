@@ -27,14 +27,9 @@ public class Extension implements BurpExtension {
     // GLOBALS
     public MontoyaApi api;
     private final String extensionName = "BurpSidian";
-    private final String version = "v1.0.2";
-    //whats new:
-        /* 
-        - Fixed an issue where the extension would create certain js page files rather than append them to the resources log
-        - Created a new SiteLog.md file that lists pages in hierarchy
-        */
+    private final String version = "v1.0.3";
     
-    private final String[] resourceExtensions = {".mp4", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".css", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".otf"};
+    private final String[] resourceExtensions = {".mp4", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".css", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".otf", ".json"};
 
     private final Map<String, PlainTextRequestResponse> loggedPages = new HashMap<>();
     Set<String> loggedResourceUrls = new HashSet<>();
@@ -50,7 +45,7 @@ public class Extension implements BurpExtension {
         // settings.put("showInlineJS", new Setting("showInlineJS", "checkbox", "true", "Include Inline JavaScript found in responses in markdown", null, null, false, null, null, false));
         // settings.put("skipResources", new Setting("skipResources", "checkbox", "true", "Don't create markdown pages for images/css", null, null, false, null, null, false));
         settings.put("monitoringButton", new Setting("monitoringButton", "button", null, null, "Start Montoring", "monitor", false, null, null, false));
-        settings.put("outputDirButton", new Setting("outputDirButton", "button", "/home/kali/Documents/Projects/Pentests/GinJuice BurpSidian Test/2. Map/", "Obsidian Vault/Output Location", "Browse", "browse", true, "directory", "outputDirTxt", false));
+        settings.put("outputDirButton", new Setting("outputDirButton", "button", "/home/assess/Desktop/Pen tests/Pen Tests/extension test/2. Map", "Obsidian Vault/Output Location", "Browse", "browse", true, "directory", "outputDirTxt", false));
     }
 
     // initialize burp panel
@@ -142,9 +137,8 @@ public class Extension implements BurpExtension {
 
     //methods
     public void startMonitoringThread(MontoyaApi api) {
-        String dirPath = settings.get("outputDirButton").getDefaultValue();
-        
-
+        String dirPath = settings.get("outputDirButton").getDefaultValue().concat("/");
+      
         monitorThread = new Thread(() -> {
             while (monitoring) {
                 try {  
@@ -193,13 +187,16 @@ public class Extension implements BurpExtension {
                             System.out.println("Create page for: " + strippedUrl);
                             //process the request/response
                             PlainTextRequestResponse plainTextRequestResponse = PlainTextRequestResponse.from(request, response);
-                            MarkdownWriter.createPageMd(dirPath, plainTextRequestResponse);
+                            
+                            MarkdownWriter.createPageMd(dirPath, plainTextRequestResponse, response);
                             MarkdownWriter.appendToSiteLog(url, reqRes, false, dirPath + "SiteLog.md");
 
                             loggedPages.put(strippedUrl, plainTextRequestResponse);
 
                             //put url + method in logged urls
-                            loggedPageUrls.put(strippedUrl, request.method()); // ? wtf
+                            loggedPageUrls.put(strippedUrl, request.method());
+                            System.out.println(loggedPageUrls.toString());
+                            
                         } else if (needsUpdateCheck) {
                             loggedPages.get(strippedUrl);
                         }
